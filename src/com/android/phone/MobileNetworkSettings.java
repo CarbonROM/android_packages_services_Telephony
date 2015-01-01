@@ -276,7 +276,6 @@ public class MobileNetworkSettings extends PreferenceActivity
 
         mButtonNationalDataRoam = (SwitchPreference) prefSet.findPreference(
                 BUTTON_NATIONAL_ROAMING_KEY);
-        mButtonNationalDataRoam.setOnPreferenceChangeListener(this);
 
         mLteDataServicePref = prefSet.findPreference(BUTTON_CDMA_LTE_DATA_SERVICE_KEY);
 
@@ -441,6 +440,7 @@ public class MobileNetworkSettings extends PreferenceActivity
         mButtonNationalDataRoam.setChecked(android.provider.Settings.System.getInt(
                 mPhone.getContext().getContentResolver(),
                 android.provider.Settings.System.MVNO_ROAMING, 0) == 1);
+        mButtonNationalDataRoam.setOnPreferenceChangeListener(this);
 
         if (getPreferenceScreen().findPreference(BUTTON_PREFERED_NETWORK_MODE) != null)  {
             mPhone.getPreferredNetworkType(mHandler.obtainMessage(
@@ -609,11 +609,8 @@ public class MobileNetworkSettings extends PreferenceActivity
             }
             return true;
         } else if (preference == mButtonNationalDataRoam) {
-            if (DBG) log("onPreferenceTreeClick: preference == mButtonNationalDataRoam.");
             android.provider.Settings.System.putInt(mPhone.getContext().getContentResolver(),
-                    android.provider.Settings.System.MVNO_ROAMING,
-                    mButtonNationalDataRoam.isChecked() ? 1 : 0);
-            return true;
+                    android.provider.Settings.System.MVNO_ROAMING, (Boolean) objValue ? 1 : 0);
         }
 
         // always let the preference setting proceed.
