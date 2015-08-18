@@ -195,12 +195,6 @@ public class MobileNetworkSettings extends PreferenceActivity
                     REQUEST_CODE_EXIT_ECM);
             }
             return true;
-        } else if (preference == mButtonPreferredNetworkMode) {
-            //displays the value taken from the Settings.System
-            int settingsNetworkMode = getPreferredNetworkSetting();
-
-            mButtonPreferredNetworkMode.setValue(Integer.toString(settingsNetworkMode));
-            return true;
         } else if (preference == mLteDataServicePref) {
             String tmpl = android.provider.Settings.Global.getString(getContentResolver(),
                         android.provider.Settings.Global.SETUP_PREPAID_DATA_SERVICE_URL);
@@ -619,6 +613,9 @@ public class MobileNetworkSettings extends PreferenceActivity
                 android.provider.Settings.System.MVNO_ROAMING, 0) == 1);
         mButtonNationalDataRoam.setOnPreferenceChangeListener(this);
 
+        // Disable network buttons until we get a callback from the modem
+        disableNetworkButtons();
+
         if (getPreferenceScreen().findPreference(BUTTON_PREFERED_NETWORK_MODE) != null)  {
             mPhone.getPreferredNetworkType(mHandler.obtainMessage(
                     MyHandler.MESSAGE_GET_PREFERRED_NETWORK_TYPE));
@@ -873,23 +870,19 @@ public class MobileNetworkSettings extends PreferenceActivity
             for (int i = 0; i < tm.getPhoneCount(); i++) {
                 if (mPhone.getPhoneId() != i) {
                     Phone phone = PhoneFactory.getPhone(i);
+                    TelephonyManager.putIntAtIndex(mPhone.getContext().getContentResolver(),
+                            android.provider.Settings.Global.PREFERRED_NETWORK_MODE, i,
+                            Phone.NT_MODE_GSM_ONLY);
                     phone.setPreferredNetworkType(Phone.NT_MODE_GSM_ONLY, mHandler
                             .obtainMessage(MyHandler.MESSAGE_SET_PREFERRED_NETWORK_TYPE_OTHER_SIM));
                 }
             }
-            TelephonyManager.putIntAtIndex(mPhone.getContext().getContentResolver(),
-                    android.provider.Settings.Global.PREFERRED_NETWORK_MODE,
-                    mPhone.getPhoneId(),
-                    modemNetworkMode);
-            if (mButtonPreferredNetworkMode != null) {
-                mButtonPreferredNetworkMode.setEnabled(false);
-            }  else if (mButtonEnabledNetworks != null) {
-                mButtonEnabledNetworks.setEnabled(false);
-            }
+            setPreferredNetworkSetting(modemNetworkMode);
         } else {
             mPhone.setPreferredNetworkType(modemNetworkMode, mHandler
                         .obtainMessage(MyHandler.MESSAGE_SET_PREFERRED_NETWORK_TYPE));
         }
+        disableNetworkButtons();
     }
 
     private class MyHandler extends Handler {
@@ -984,6 +977,7 @@ public class MobileNetworkSettings extends PreferenceActivity
                     resetNetworkModeToDefault();
                 }
             }
+            enableNetworkButtons();
         }
 
         private void handleSetPreferredNetworkTypeResponse(Message msg) {
@@ -1010,11 +1004,6 @@ public class MobileNetworkSettings extends PreferenceActivity
                 }
             } else {
                 mPhone.getPreferredNetworkType(obtainMessage(MESSAGE_GET_PREFERRED_NETWORK_TYPE));
-            }
-            if (mButtonPreferredNetworkMode != null) {
-                mButtonPreferredNetworkMode.setEnabled(true);
-            }  else if (mButtonEnabledNetworks != null) {
-                mButtonEnabledNetworks.setEnabled(true);
             }
         }
 
@@ -1068,6 +1057,22 @@ public class MobileNetworkSettings extends PreferenceActivity
         }
 
         return false;
+    }
+
+    private void disableNetworkButtons() {
+        if (mButtonPreferredNetworkMode != null) {
+            mButtonPreferredNetworkMode.setEnabled(false);
+        }  else if (mButtonEnabledNetworks != null) {
+            mButtonEnabledNetworks.setEnabled(false);
+        }
+    }
+
+    private void enableNetworkButtons() {
+        if (mButtonPreferredNetworkMode != null) {
+            mButtonPreferredNetworkMode.setEnabled(true);
+        }  else if (mButtonEnabledNetworks != null) {
+            mButtonEnabledNetworks.setEnabled(true);
+        }
     }
 
     private void UpdatePreferredNetworkModeSummary(int NetworkMode) {
