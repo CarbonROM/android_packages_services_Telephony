@@ -2601,25 +2601,27 @@ public class PhoneUtils {
         String modemUuId = null;
         int primayStackPhoneId = SubscriptionManager.INVALID_PHONE_INDEX;
 
-        for (Phone phone : PhoneFactory.getPhones()) {
-            if (phone == null) continue;
+        try {
+            for (Phone phone : PhoneFactory.getPhones()) {
+                if (phone == null) continue;
 
-            Log.d(LOG_TAG, "Logical Modem id: " + phone.getModemUuId()
-                    + " phoneId: " + phone.getPhoneId());
-            modemUuId = phone.getModemUuId();
-            if ((modemUuId == null) || (modemUuId.length() <= 0) ||
-                    modemUuId.isEmpty()) {
-                continue;
+                Log.d(LOG_TAG, "Logical Modem id: " + phone.getModemUuId()
+                        + " phoneId: " + phone.getPhoneId());
+                modemUuId = phone.getModemUuId();
+                if ((modemUuId == null) || (modemUuId.length() <= 0) ||
+                        modemUuId.isEmpty()) {
+                    continue;
+                        }
+                // Select the phone id based on modemUuid
+                // if modemUuid is 0 for any phone instance, primary stack is mapped
+                // to it so return the phone id as the primary stack phone id.
+                if (Integer.parseInt(modemUuId) == PRIMARY_STACK_MODEM_ID) {
+                    primayStackPhoneId = phone.getPhoneId();
+                    Log.d(LOG_TAG, "Primay Stack phone id: " + primayStackPhoneId + " selected");
+                    break;
+                }
             }
-            // Select the phone id based on modemUuid
-            // if modemUuid is 0 for any phone instance, primary stack is mapped
-            // to it so return the phone id as the primary stack phone id.
-            if (Integer.parseInt(modemUuId) == PRIMARY_STACK_MODEM_ID) {
-                primayStackPhoneId = phone.getPhoneId();
-                Log.d(LOG_TAG, "Primay Stack phone id: " + primayStackPhoneId + " selected");
-                break;
-            }
-        }
+        } catch(Throwable t) {}
 
         // If phone id is invalid return default phone id
         if (primayStackPhoneId == SubscriptionManager.INVALID_PHONE_INDEX) {
