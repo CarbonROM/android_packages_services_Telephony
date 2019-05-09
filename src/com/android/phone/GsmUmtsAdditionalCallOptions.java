@@ -1,6 +1,8 @@
 package com.android.phone;
 
 import android.app.ActionBar;
+import android.content.Context;
+import android.content.Intent;
 import android.os.Bundle;
 import android.os.PersistableBundle;
 import android.preference.Preference;
@@ -88,7 +90,6 @@ public class GsmUmtsAdditionalCallOptions extends TimeConsumingPreferenceActivit
                     mCWButton.init(this, true, mPhone);
                 }
                 if (mShowCLIRButton) {
-                    mCLIRButton.init(this, true, mPhone);
                     int[] clirArray = icicle.getIntArray(mCLIRButton.getKey());
                     if (clirArray != null) {
                         if (DBG) {
@@ -97,7 +98,11 @@ public class GsmUmtsAdditionalCallOptions extends TimeConsumingPreferenceActivit
                         }
                         mCLIRButton.handleGetCLIRResult(clirArray);
                     } else {
-                        mCLIRButton.init(this, false, mPhone);
+                        if (isUtEnabledToDisableClir()) {
+                            mCLIRButton.setSummary(R.string.sum_default_caller_id);
+                        } else {
+                            mCLIRButton.init(this, false, mPhone);
+                        }
                     }
                 }
             }
@@ -110,6 +115,16 @@ public class GsmUmtsAdditionalCallOptions extends TimeConsumingPreferenceActivit
         }
     }
 
+    private boolean isUtEnabledToDisableClir() {
+        boolean skipClir = false;
+        CarrierConfigManager configManager = (CarrierConfigManager)
+            getSystemService(Context.CARRIER_CONFIG_SERVICE);
+        PersistableBundle pb = configManager.getConfigForSubId(mPhone.getSubId());
+        if (pb != null) {
+            skipClir = pb.getBoolean("config_disable_clir_over_ut");
+        }
+        return mPhone.isUtEnabled() && skipClir;
+    }
     @Override
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
@@ -144,7 +159,11 @@ public class GsmUmtsAdditionalCallOptions extends TimeConsumingPreferenceActivit
             if (pref instanceof CallWaitingSwitchPreference) {
                 ((CallWaitingSwitchPreference) pref).init(this, false, mPhone);
             } else if (pref instanceof CLIRListPreference) {
-                ((CLIRListPreference) pref).init(this, false, mPhone);
+                if (isUtEnabledToDisableClir()) {
+                  ((CLIRListPreference) pref).setSummary(R.string.sum_default_caller_id);
+                } else {
+                  ((CLIRListPreference) pref).init(this, false, mPhone);
+                }
             }
         }
     }
