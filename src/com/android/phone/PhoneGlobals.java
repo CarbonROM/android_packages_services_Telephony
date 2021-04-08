@@ -44,6 +44,7 @@ import android.preference.PreferenceManager;
 import android.provider.Settings;
 import android.sysprop.TelephonyProperties;
 import android.telecom.TelecomManager;
+import android.telephony.AccessNetworkConstants;
 import android.telephony.AnomalyReporter;
 import android.telephony.CarrierConfigManager;
 import android.telephony.ServiceState;
@@ -121,6 +122,7 @@ public class PhoneGlobals extends ContextWrapper {
     private static final int EVENT_DATA_ROAMING_SETTINGS_CHANGED = 15;
     private static final int EVENT_MOBILE_DATA_SETTINGS_CHANGED = 16;
     private static final int EVENT_CARRIER_CONFIG_CHANGED = 17;
+    private static final int EVENT_DATA_CONNECTION_ATTACHED = 18;
 
     // The MMI codes are also used by the InCallScreen.
     public static final int MMI_INITIATE = 51;
@@ -234,13 +236,12 @@ public class PhoneGlobals extends ContextWrapper {
                         // Normal case: show the "SIM network unlock" PIN entry screen.
                         // The user won't be able to do anything else until
                         // they enter a valid SIM network PIN.
-                        Log.i(LOG_TAG, "show sim depersonal panel");
                         Phone phone = (Phone) ((AsyncResult) msg.obj).userObj;
                         int subType = (Integer)((AsyncResult)msg.obj).result;
+                        Log.i(LOG_TAG, "show sim depersonal panel");
                         IccNetworkDepersonalizationPanel.showDialog(phone, subType);
                     }
                     break;
-
                 case EVENT_DATA_ROAMING_DISCONNECTED:
                     notificationMgr.showDataRoamingNotification(msg.arg1, false);
                     break;
@@ -267,7 +268,9 @@ public class PhoneGlobals extends ContextWrapper {
                     // process.
                     EventSimStateChangedBag bag = (EventSimStateChangedBag)msg.obj;
                     if (IccCardConstants.INTENT_VALUE_ICC_READY.equals(bag.mIccStatus)
-                            || IccCardConstants.INTENT_VALUE_ICC_LOADED.equals(bag.mIccStatus)) {
+                            || IccCardConstants.INTENT_VALUE_ICC_LOADED.equals(bag.mIccStatus)
+                            || IccCardConstants.INTENT_VALUE_ICC_NOT_READY.equals(bag.mIccStatus)
+                            || IccCardConstants.INTENT_VALUE_ICC_ABSENT.equals(bag.mIccStatus)) {
                         // when the right event is triggered and there
                         // are UI objects in the foreground, we close
                         // them to display the lock panel.
@@ -309,6 +312,21 @@ public class PhoneGlobals extends ContextWrapper {
                     // The voicemail number could be overridden by carrier config, so need to
                     // refresh the message waiting (voicemail) indicator.
                     refreshMwiIndicator(subId);
+                    break;
+                case EVENT_DATA_CONNECTION_ATTACHED:
+                    int subIdQ = (Integer)((AsyncResult)msg.obj).userObj;
+                    Phone phone = getPhone(subIdQ);
+                    if (phone != null) {
+                        DataConnectionReasons reasons = new DataConnectionReasons();
+                        boolean dataAllowed = phone.isDataAllowed(ApnSetting.TYPE_DEFAULT, reasons);
+                        if (!dataAllowed && dataIsNowRoaming(subIdQ)
+                                && subIdQ == mDefaultDataSubId) {
+                            if (VDBG) Log.v(LOG_TAG, "EVENT_DATA_CONNECTION_ATTACHED");
+                                updateDataRoamingStatus();
+                        }
+                    } else {
+                        Log.w(LOG_TAG, "phone object is null subId: " + subIdQ);
+                    }
                     break;
             }
         }
@@ -669,6 +687,9 @@ public class PhoneGlobals extends ContextWrapper {
                 // re-register as it may be a new IccCard
                 int phoneId = intent.getIntExtra(PhoneConstants.PHONE_KEY,
                         SubscriptionManager.INVALID_PHONE_INDEX);
+                int subId = intent.getIntExtra(SubscriptionManager.EXTRA_SUBSCRIPTION_INDEX,
+                        SubscriptionManager.INVALID_SIM_SLOT_INDEX);
+                String simStatus = intent.getStringExtra(IccCardConstants.INTENT_KEY_ICC_STATE);
                 if (SubscriptionManager.isValidPhoneId(phoneId)) {
                     PhoneUtils.unregisterIccStatus(mHandler, phoneId);
                     PhoneUtils.registerIccStatus(mHandler, EVENT_SIM_NETWORK_LOCKED, phoneId);
@@ -676,6 +697,17 @@ public class PhoneGlobals extends ContextWrapper {
                 String iccStatus = intent.getStringExtra(IccCardConstants.INTENT_KEY_ICC_STATE);
                 mHandler.sendMessage(mHandler.obtainMessage(EVENT_SIM_STATE_CHANGED,
                         new EventSimStateChangedBag(phoneId, iccStatus)));
+                Phone phone = PhoneFactory.getPhone(phoneId);
+                if (phone != null) {
+                    if (IccCardConstants.INTENT_VALUE_ICC_LOADED.equals(simStatus)) {
+                        phone.getServiceStateTracker().registerForDataConnectionAttached(
+                                AccessNetworkConstants.TRANSPORT_TYPE_WWAN, mHandler, EVENT_DATA_CONNECTION_ATTACHED, subId);
+                    } else if (IccCardConstants.INTENT_VALUE_ICC_ABSENT.equals(simStatus)
+                            || IccCardConstants.INTENT_VALUE_ICC_CARD_IO_ERROR.equals(simStatus)) {
+                        phone.getServiceStateTracker()
+                                .unregisterForDataConnectionAttached(AccessNetworkConstants.TRANSPORT_TYPE_WWAN, mHandler);
+                    }
+                }
             } else if (action.equals(TelephonyIntents.ACTION_RADIO_TECHNOLOGY_CHANGED)) {
                 String newPhone = intent.getStringExtra(PhoneConstants.PHONE_NAME_KEY);
                 Log.d(LOG_TAG, "Radio technology switched. Now " + newPhone + " is active.");
