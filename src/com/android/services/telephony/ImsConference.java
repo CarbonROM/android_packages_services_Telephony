@@ -29,6 +29,9 @@ import android.telecom.StatusHints;
 import android.telecom.TelecomManager;
 import android.telecom.VideoProfile;
 import android.telephony.PhoneNumberUtils;
+import android.telephony.SubscriptionInfo;
+import android.telephony.SubscriptionManager;
+import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.Pair;
 
@@ -90,6 +93,8 @@ public class ImsConference extends TelephonyConferenceBase implements Holdable {
             private int mMaximumConferenceSize = 5;
             private boolean mShouldLocalDisconnectEmptyConference = false;
             private boolean mIsHoldAllowed = false;
+            private boolean mIsMultiAnchorConferenceSupported = false;
+            private boolean mFilterOutConferenceHost = true;
 
             /**
              * Sets whether the maximum size of the conference is enforced.
@@ -135,13 +140,37 @@ public class ImsConference extends TelephonyConferenceBase implements Holdable {
             }
 
             /**
+             * Sets if the carrier associated with the conference supports multianchor.
+             * @param isMultiAnchorConferenceSupported {@code true} if the carrier associated with
+             * the conference supports multianchor.
+             * @return builder instance.
+             */
+            public Builder setIsMultiAnchorConferenceSupported(
+                    boolean isMultiAnchorConferenceSupported) {
+                mIsMultiAnchorConferenceSupported = isMultiAnchorConferenceSupported;
+                return this;
+            }
+
+            /**
+             * Sets whether the conference host should be filtered out.
+             * @param filterOutConferenceHost {@code true} if the conference host should be filtered
+             * out.
+             * @return builder instance.
+             */
+            public Builder setFilterOutConferenceHost(boolean filterOutConferenceHost) {
+                mFilterOutConferenceHost = filterOutConferenceHost;
+                return this;
+            }
+
+            /**
              * Build instance of {@link CarrierConfiguration}.
              * @return carrier config instance.
              */
             public ImsConference.CarrierConfiguration build() {
                 return new ImsConference.CarrierConfiguration(mIsMaximumConferenceSizeEnforced,
                         mMaximumConferenceSize, mShouldLocalDisconnectEmptyConference,
-                        mIsHoldAllowed);
+                        mIsHoldAllowed, mIsMultiAnchorConferenceSupported,
+                        mFilterOutConferenceHost);
             }
         }
 
@@ -153,13 +182,20 @@ public class ImsConference extends TelephonyConferenceBase implements Holdable {
 
         private boolean mIsHoldAllowed;
 
+        private boolean mIsMultiAnchorConferenceSupported;
+
+        private boolean mFilterOutConferenceHost;
+
         private CarrierConfiguration(boolean isMaximumConferenceSizeEnforced,
                 int maximumConferenceSize, boolean shouldLocalDisconnectEmptyConference,
-                boolean isHoldAllowed) {
+                boolean isHoldAllowed, boolean isMultiAnchorConferenceSupported,
+                boolean filterOutConferenceHost) {
             mIsMaximumConferenceSizeEnforced = isMaximumConferenceSizeEnforced;
             mMaximumConferenceSize = maximumConferenceSize;
             mShouldLocalDisconnectEmptyConference = shouldLocalDisconnectEmptyConference;
             mIsHoldAllowed = isHoldAllowed;
+            mIsMultiAnchorConferenceSupported = isMultiAnchorConferenceSupported;
+            mFilterOutConferenceHost = filterOutConferenceHost;
         }
 
         /**
@@ -195,6 +231,23 @@ public class ImsConference extends TelephonyConferenceBase implements Holdable {
          */
         public boolean isHoldAllowed() {
             return mIsHoldAllowed;
+        }
+
+        /**
+         * @return {@code true} if the carrier associated with the conference supports multianchor
+         * conference, {@code false} otherwise.
+         */
+        public boolean isMultiAnchorConferenceSupported() {
+            return mIsMultiAnchorConferenceSupported;
+        }
+
+        /**
+         * Determines whether the conference host should be filtered out.
+         * @return {@code true} if the conference host should be filtered out, {@code false}
+         * otherwise.
+         */
+        public boolean shouldFilterOutConferenceHost() {
+            return mFilterOutConferenceHost;
         }
     }
 
@@ -974,7 +1027,9 @@ public class ImsConference extends TelephonyConferenceBase implements Holdable {
                     if (!mConferenceParticipantConnections.containsKey(userEntity)) {
                         // Some carriers will also include the conference host in the CEP.  We will
                         // filter that out here.
-                        if (!isParticipantHost(mConferenceHostAddress, participant.getHandle())) {
+                        if ((!isParticipantHost(mConferenceHostAddress, participant.getHandle())
+                               || !mCarrierConfig.shouldFilterOutConferenceHost())) {
+                            Log.i(this, "Create participant connection, participant = %s", participant);
                             createConferenceParticipantConnection(parent, participant);
                             newParticipants.add(participant);
                             newParticipantsAdded = true;
@@ -1193,7 +1248,8 @@ public class ImsConference extends TelephonyConferenceBase implements Holdable {
         // active call.
         ConferenceParticipantConnection connection = new ConferenceParticipantConnection(
                 parent.getOriginalConnection(), participant,
-                !isConferenceHost() /* isRemotelyHosted */);
+                !isConferenceHost() /* isRemotelyHosted */,
+                isParticipantHost(mConferenceHostAddress, participant.getHandle()));
         if (participant.getConnectTime() == 0) {
             connection.setConnectTimeMillis(parent.getConnectTimeMillis());
             connection.setConnectionStartElapsedRealtimeMillis(
@@ -1392,7 +1448,7 @@ public class ImsConference extends TelephonyConferenceBase implements Holdable {
                         c.getConnectionProperties() | Connection.PROPERTY_IS_DOWNGRADED_CONFERENCE);
                 c.updateState();
                 // Copy the connect time from the conferenceHost
-                c.setConnectTimeMillis(mConferenceHost.getConnectTimeMillis());
+                c.setConnectTimeMillis(originalConnection.getConnectTime());
                 c.setConnectionStartElapsedRealtimeMillis(
                         mConferenceHost.getConnectionStartElapsedRealtimeMillis());
                 mTelephonyConnectionService.addExistingConnection(phoneAccountHandle, c);
@@ -1474,8 +1530,19 @@ public class ImsConference extends TelephonyConferenceBase implements Holdable {
             Phone phone = mConferenceHost.getPhone();
             if (phone != null) {
                 Context context = phone.getContext();
+                String displaySubId = "";
+                if (TelephonyManager.getDefault().getActiveModemCount() > 1) {
+                    final int phoneId = mConferenceHost.getPhone().getPhoneId();
+                    SubscriptionInfo sub = SubscriptionManager.from(
+                            mConferenceHost.getPhone().getContext())
+                        .getActiveSubscriptionInfoForSimSlotIndex(phoneId);
+                    if (sub != null) {
+                        displaySubId = sub.getDisplayName().toString();
+                        displaySubId  = " " + displaySubId;
+                    }
+                }
                 StatusHints hints = new StatusHints(
-                        context.getString(R.string.status_hint_label_wifi_call),
+                        context.getString(R.string.status_hint_label_wifi_call) + displaySubId,
                         Icon.createWithResource(
                                 context, R.drawable.ic_signal_wifi_4_bar_24dp),
                         null /* extras */);
@@ -1573,6 +1640,14 @@ public class ImsConference extends TelephonyConferenceBase implements Holdable {
         sb.append(mConferenceParticipantConnections.size());
         sb.append("]");
         return sb.toString();
+    }
+
+    /**
+     * @return {@code true} if the carrier associated with the conference supports multianchor
+     * conference, {@code false} otherwise.
+     */
+    public boolean isMultiAnchorConferenceSupported() {
+        return mCarrierConfig.isMultiAnchorConferenceSupported();
     }
 
     /**
