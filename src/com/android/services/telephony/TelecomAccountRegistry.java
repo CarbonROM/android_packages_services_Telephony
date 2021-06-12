@@ -1560,18 +1560,20 @@ public class TelecomAccountRegistry {
                         if (mTelephonyManager.getPhoneCount() > 1) {
                             IExtTelephony mExtTelephony = IExtTelephony.Stub
                                     .asInterface(ServiceManager.getService("qti.radio.extphone"));
-                            try {
-                                //get current provision state of the SIM.
-                                provisionStatus =
-                                        mExtTelephony.getCurrentUiccCardProvisioningStatus(slotId);
-                            } catch (RemoteException ex) {
-                                provisionStatus = INVALID_STATE;
-                                Log.w(this, "Failed to get status , slotId: "+ slotId +" Exception: "
-                                        + ex);
-                            } catch (NullPointerException ex) {
-                                provisionStatus = INVALID_STATE;
-                                Log.w(this, "Failed to get status , slotId: "+ slotId +" Exception: "
-                                        + ex);
+                            if (mExtTelephony != null) {
+                                try {
+                                    //get current provision state of the SIM.
+                                    provisionStatus =
+                                            mExtTelephony.getCurrentUiccCardProvisioningStatus(slotId);
+                                } catch (RemoteException ex) {
+                                    provisionStatus = INVALID_STATE;
+                                    Log.w(this, "Failed to get status , slotId: "+ slotId +" Exception: "
+                                            + ex);
+                                } catch (NullPointerException ex) {
+                                    provisionStatus = INVALID_STATE;
+                                    Log.w(this, "Failed to get status , slotId: "+ slotId +" Exception: "
+                                            + ex);
+                                }
                             }
                         }
 
@@ -1677,18 +1679,22 @@ public class TelecomAccountRegistry {
         IExtTelephony extTelephony = IExtTelephony.Stub
                 .asInterface(ServiceManager.getService("qti.radio.extphone"));
         int provisionStatus = INVALID_STATE;
-        try {
-            //get current provision state of the SIM.
-            provisionStatus = extTelephony
-                    .getCurrentUiccCardProvisioningStatus(subInfo.getSimSlotIndex());
-        } catch (RemoteException ex) {
-            Log.w(this, "Failed to get status for slotId: "
-                    + subInfo.getSimSlotIndex() + " Exception: " + ex);
-        } catch (NullPointerException ex) {
-            Log.w(this, "Failed to get status for slotId: "
-                    + subInfo.getSimSlotIndex() + " Exception: " + ex);
+        if (extTelephony != null) {
+            try {
+                //get current provision state of the SIM.
+                provisionStatus = extTelephony
+                        .getCurrentUiccCardProvisioningStatus(subInfo.getSimSlotIndex());
+            } catch (RemoteException ex) {
+                Log.w(this, "Failed to get status for slotId: "
+                        + subInfo.getSimSlotIndex() + " Exception: " + ex);
+            } catch (NullPointerException ex) {
+                Log.w(this, "Failed to get status for slotId: "
+                        + subInfo.getSimSlotIndex() + " Exception: " + ex);
+            }
+            return provisionStatus == PROVISIONED;
+        } else {
+            return true;
         }
-        return provisionStatus == PROVISIONED;
     }
 
     private boolean areAllSimAccountsFound() {
