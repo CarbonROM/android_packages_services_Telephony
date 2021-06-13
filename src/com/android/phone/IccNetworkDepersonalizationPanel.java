@@ -310,7 +310,7 @@ public class IccNetworkDepersonalizationPanel extends IccPanel {
             try {
                 // If 1.5 or above HAL Version, then functionality uses IRadio.hal
                 // else follow legacy procedure
-                if(mPhone.getHalVersion().greaterOrEqual(RIL.RADIO_HAL_VERSION_1_5)) {
+                if(mExtTelephony == null || mPhone.getHalVersion().greaterOrEqual(RIL.RADIO_HAL_VERSION_1_5)) {
                     mPhone.getIccCard().supplySimDepersonalization(mPersoSubState,pin,
                            Message.obtain(mHandler, EVENT_ICC_NTWRK_DEPERSONALIZATION_RESULT));
                 } else {
