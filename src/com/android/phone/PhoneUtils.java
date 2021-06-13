@@ -851,7 +851,11 @@ public class PhoneUtils {
     public static boolean isLocalEmergencyNumber(String address) {
         boolean result = false;
         try {
-            result = getIExtTelephony().isLocalEmergencyNumber(address);
+            IExtTelephony mIExtTelephony = getIExtTelephony();
+            if (mIExtTelephony == null) {
+                return PhoneNumberUtils.isLocalEmergencyNumber(PhoneGlobals.getInstance(), address);
+            }
+            result = mIExtTelephony.isLocalEmergencyNumber(address);
         }catch (RemoteException ex) {
             Log.e("TelephonyConnectionService", "Exception: " + ex);
         } catch (NullPointerException ex) {
@@ -863,7 +867,11 @@ public class PhoneUtils {
     public static boolean isPotentialLocalEmergencyNumber(String address) {
         boolean result = false;
         try {
-            result = getIExtTelephony().isPotentialLocalEmergencyNumber(address);
+            IExtTelephony mIExtTelephony = getIExtTelephony();
+            if (mIExtTelephony == null) {
+                return PhoneNumberUtils.isPotentialLocalEmergencyNumber(PhoneGlobals.getInstance(), address);
+            }
+            result = mIExtTelephony.isPotentialLocalEmergencyNumber(address);
         }catch (RemoteException ex) {
             Log.e("TelephonyConnectionService", "Exception: " + ex);
         } catch (NullPointerException ex) {
@@ -875,7 +883,11 @@ public class PhoneUtils {
     public static boolean isEmergencyNumber(String address) {
         boolean result = false;
         try {
-            result = getIExtTelephony().isEmergencyNumber(address);
+            IExtTelephony mIExtTelephony = getIExtTelephony();
+            if (mIExtTelephony == null) {
+                return PhoneNumberUtils.isEmergencyNumber(address);
+            }
+            result = mIExtTelephony.isEmergencyNumber(address);
         }catch (RemoteException ex) {
             Log.e("TelephonyConnectionService", "Exception: " + ex);
         } catch (NullPointerException ex) {
@@ -899,7 +911,11 @@ public class PhoneUtils {
     public static int getPhoneIdForECall() {
         int phoneId = 0;
         try {
-            phoneId = getIExtTelephony().getPhoneIdForECall();
+            IExtTelephony mIExtTelephony = getIExtTelephony();
+            if (mIExtTelephony == null) {
+                return -1;
+            }
+            phoneId = mIExtTelephony.getPhoneIdForECall();
         } catch (RemoteException ex) {
             Log.e("TelephonyConnectionService", "Exceptions : " + ex);
         } catch (NullPointerException ex) {
